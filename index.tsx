@@ -3169,6 +3169,17 @@ const App = () => {
       if (isTimerMode) {
         setBonusScore(b => b + (timeLeft * 10));
       }
+      // Если ответили правильно и этот вопрос был в ошибках - убираем его
+      if (mistakeIds.includes(currentQ.id)) {
+        const remainingMistakes = mistakeIds.filter(id => id !== currentQ.id);
+        saveMistakes(remainingMistakes);
+
+        // Check for error_fixer achievement immediately
+        if (remainingMistakes.length === 0 && !unlockedAchievements.includes('error_fixer')) {
+          setUnlockedAchievements(prev => [...prev, 'error_fixer']);
+          setNewAchievementsThisRound(prev => [...prev, { id: 'error_fixer', name: 'Clarity Seeker', description: 'Have 0 mistakes in your error list', icon: '✨' }]);
+        }
+      }
     } else {
       if (!mistakeIds.includes(currentQ.id)) {
         saveMistakes([...mistakeIds, currentQ.id]);
