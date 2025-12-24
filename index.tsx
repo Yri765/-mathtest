@@ -3597,8 +3597,8 @@ const App = () => {
               {quizMode === 'mistakes'
                 ? `Вы проработали ${score} из ${currentQuestions.length} ошибок.`
                 : (isPassed
-                  ? 'Отличная работа! Вы разбираетесь в политике.'
-                  : currentJoke)
+                  ? `Отличная работа! Вы разбираетесь в политике. (${accuracy}% правильных)`
+                  : `${currentJoke} (${accuracy}% правильных)`)
               }
               {quizMode === 'mistakes' && score === currentQuestions.length && (
                 <>
