@@ -3097,628 +3097,670 @@ const App = () => {
     const saved = localStorage.getItem('quiz_xp');
     return saved ? parseInt(saved) : 0;
   });
-  const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(() => {
-    const saved = localStorage.getItem('quiz_achievements');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const saved = localStorage.getItem('quiz_achievements');
+  return saved ? JSON.parse(saved) : [];
+});
+const [uniqueUsedIds, setUniqueUsedIds] = useState<number[]>(() => {
+  const saved = localStorage.getItem('quiz_unique_history');
+  return saved ? JSON.parse(saved) : [];
+});
 
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(TIME_PER_QUESTION);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
-  const [newAchievementsThisRound, setNewAchievementsThisRound] = useState<Achievement[]>([]);
-  const [isCopied, setIsCopied] = useState(false);
-  const [currentJoke, setCurrentJoke] = useState('');
-  const [quizMode, setQuizMode] = useState<'normal' | 'mistakes'>('normal');
+const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+const [timeLeft, setTimeLeft] = useState(TIME_PER_QUESTION);
+const [isAnswered, setIsAnswered] = useState(false);
+const [shuffledOptions, setShuffledOptions] = useState<string[]>([]);
+const [newAchievementsThisRound, setNewAchievementsThisRound] = useState<Achievement[]>([]);
+const [isCopied, setIsCopied] = useState(false);
+const [currentJoke, setCurrentJoke] = useState('');
+const [quizMode, setQuizMode] = useState<'normal' | 'mistakes' | 'unique'>('normal');
 
-  // Computed Values
-  const currentLevel = Math.floor(totalXP / 1000) + 1;
-  const xpInCurrentLevel = totalXP % 1000;
-  const levelProgress = (xpInCurrentLevel / 1000) * 100;
+// Computed Values
+const currentLevel = Math.floor(totalXP / 1000) + 1;
+const xpInCurrentLevel = totalXP % 1000;
+const levelProgress = (xpInCurrentLevel / 1000) * 100;
 
-  // Persistence
-  useEffect(() => {
-    localStorage.setItem('quiz_xp', totalXP.toString());
-  }, [totalXP]);
+// Persistence
+useEffect(() => {
+  localStorage.setItem('quiz_xp', totalXP.toString());
+}, [totalXP]);
 
-  useEffect(() => {
-    localStorage.setItem('quiz_achievements', JSON.stringify(unlockedAchievements));
-  }, [unlockedAchievements]);
+useEffect(() => {
+  localStorage.setItem('quiz_achievements', JSON.stringify(unlockedAchievements));
+}, [unlockedAchievements]);
 
-  // Helpers
-  const shuffle = <T,>(array: T[]): T[] => [...array].sort(() => Math.random() - 0.5);
+useEffect(() => {
+  localStorage.setItem('quiz_unique_history', JSON.stringify(uniqueUsedIds));
+}, [uniqueUsedIds]);
 
-  const saveMistakes = (ids: number[]) => {
-    setMistakeIds(ids);
-    localStorage.setItem('quiz_mistakes', JSON.stringify(ids));
-  };
+// Helpers
+const shuffle = <T,>(array: T[]): T[] => [...array].sort(() => Math.random() - 0.5);
 
-  const startQuiz = (mode: 'normal' | 'mistakes') => {
-    let pool = mode === 'mistakes'
-      ? QUESTION_POOL.filter(q => mistakeIds.includes(q.id))
-      : shuffle(QUESTION_POOL).slice(0, SHUFFLE_COUNT);
+const saveMistakes = (ids: number[]) => {
+  setMistakeIds(ids);
+  localStorage.setItem('quiz_mistakes', JSON.stringify(ids));
+};
 
-    if (pool.length === 0 && mode === 'mistakes') {
+const startQuiz = (mode: 'normal' | 'mistakes' | 'unique') => {
+  let pool: Question[] = [];
+
+  if (mode === 'mistakes') {
+    pool = QUESTION_POOL.filter(q => mistakeIds.includes(q.id));
+    if (pool.length === 0) {
       alert("No mistakes to work on! Great job!");
       return;
     }
+  } else if (mode === 'unique') {
+    // Filter out already used IDs
+    pool = QUESTION_POOL.filter(q => !uniqueUsedIds.includes(q.id));
 
-    setCurrentQuestions(pool);
-    setCurrentIndex(0);
-    setScore(0);
-    setBonusScore(0);
-
-    setNewAchievementsThisRound([]);
-    setQuizMode(mode);
-    setView('quiz');
-    setupQuestion(pool[0]);
-  };
-
-  const setupQuestion = (question: Question) => {
-    setShuffledOptions(shuffle(question.options));
-    setSelectedAnswer(null);
-    setIsAnswered(false);
-    setTimeLeft(TIME_PER_QUESTION);
-  };
-
-  // Timer Effect
-  useEffect(() => {
-    let interval: number;
-    if (view === 'quiz' && isTimerMode && !isAnswered && timeLeft > 0) {
-      interval = window.setInterval(() => {
-        setTimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (timeLeft === 0 && !isAnswered && isTimerMode) {
-      handleAnswer(null);
+    if (pool.length === 0) {
+      alert("You have answered all 254 questions! Resetting progress.");
+      setUniqueUsedIds([]);
+      // Optionally restart immediately or just return
+      return;
     }
-    return () => clearInterval(interval);
-  }, [view, isTimerMode, isAnswered, timeLeft]);
 
-  const handleAnswer = (answer: string | null) => {
-    if (isAnswered) return;
+    // Shuffle the remaining valid questions and take 30
+    pool = shuffle(pool).slice(0, 30);
+  } else {
+    pool = shuffle(QUESTION_POOL).slice(0, SHUFFLE_COUNT);
+  }
 
-    const currentQ = currentQuestions[currentIndex];
-    setSelectedAnswer(answer);
-    setIsAnswered(true);
+  setCurrentQuestions(pool);
+  setCurrentIndex(0);
+  setScore(0);
+  setBonusScore(0);
 
-    if (answer === currentQ.correctAnswer) {
-      setScore(s => s + 1);
-      if (isTimerMode) {
-        setBonusScore(b => b + (timeLeft * 10));
+  setNewAchievementsThisRound([]);
+  setQuizMode(mode);
+  setView('quiz');
+  setupQuestion(pool[0]);
+};
+
+const setupQuestion = (question: Question) => {
+  setShuffledOptions(shuffle(question.options));
+  setSelectedAnswer(null);
+  setIsAnswered(false);
+  setTimeLeft(TIME_PER_QUESTION);
+};
+
+// Timer Effect
+useEffect(() => {
+  let interval: number;
+  if (view === 'quiz' && isTimerMode && !isAnswered && timeLeft > 0) {
+    interval = window.setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+  } else if (timeLeft === 0 && !isAnswered && isTimerMode) {
+    handleAnswer(null);
+  }
+  return () => clearInterval(interval);
+}, [view, isTimerMode, isAnswered, timeLeft]);
+
+const handleAnswer = (answer: string | null) => {
+  if (isAnswered) return;
+
+  const currentQ = currentQuestions[currentIndex];
+  setSelectedAnswer(answer);
+  setIsAnswered(true);
+
+  if (answer === currentQ.correctAnswer) {
+    setScore(s => s + 1);
+    if (isTimerMode) {
+      setBonusScore(b => b + (timeLeft * 10));
+    }
+    // Если ответили правильно и этот вопрос был в ошибках - убираем его
+    if (mistakeIds.includes(currentQ.id)) {
+      const remainingMistakes = mistakeIds.filter(id => id !== currentQ.id);
+      saveMistakes(remainingMistakes);
+
+      // Check for error_fixer achievement immediately
+      if (remainingMistakes.length === 0 && !unlockedAchievements.includes('error_fixer')) {
+        setUnlockedAchievements(prev => [...prev, 'error_fixer']);
+        setNewAchievementsThisRound(prev => [...prev, { id: 'error_fixer', name: 'Clarity Seeker', description: 'Have 0 mistakes in your error list', icon: '✨' }]);
       }
-      // Если ответили правильно и этот вопрос был в ошибках - убираем его
-      if (mistakeIds.includes(currentQ.id)) {
-        const remainingMistakes = mistakeIds.filter(id => id !== currentQ.id);
-        saveMistakes(remainingMistakes);
+    }
+  } else {
+    if (!mistakeIds.includes(currentQ.id)) {
+      saveMistakes([...mistakeIds, currentQ.id]);
+    }
+  }
+};
 
-        // Check for error_fixer achievement immediately
-        if (remainingMistakes.length === 0 && !unlockedAchievements.includes('error_fixer')) {
-          setUnlockedAchievements(prev => [...prev, 'error_fixer']);
-          setNewAchievementsThisRound(prev => [...prev, { id: 'error_fixer', name: 'Clarity Seeker', description: 'Have 0 mistakes in your error list', icon: '✨' }]);
-        }
-      }
-    } else {
-      if (!mistakeIds.includes(currentQ.id)) {
-        saveMistakes([...mistakeIds, currentQ.id]);
-      }
+const handleNextQuestion = () => {
+  if (currentIndex < currentQuestions.length - 1) {
+    const nextIdx = currentIndex + 1;
+    setCurrentIndex(nextIdx);
+    setupQuestion(currentQuestions[nextIdx]);
+  } else {
+    finalizeQuiz();
+  }
+};
+
+const finalizeQuiz = () => {
+  const xpGained = (score * XP_PER_CORRECT) + Math.floor(bonusScore / 10);
+  const updatedXP = totalXP + xpGained;
+  setTotalXP(updatedXP);
+
+  const newlyUnlocked: Achievement[] = [];
+  const checkAchievement = (id: string, condition: boolean) => {
+    if (condition && !unlockedAchievements.includes(id)) {
+      const ach = ACHIEVEMENTS.find(a => a.id === id);
+      if (ach) newlyUnlocked.push(ach);
     }
   };
 
-  const handleNextQuestion = () => {
-    if (currentIndex < currentQuestions.length - 1) {
-      const nextIdx = currentIndex + 1;
-      setCurrentIndex(nextIdx);
-      setupQuestion(currentQuestions[nextIdx]);
-    } else {
-      finalizeQuiz();
-    }
-  };
+  checkAchievement('perfect_score', score === currentQuestions.length && currentQuestions.length === SHUFFLE_COUNT);
+  checkAchievement('speed_demon', bonusScore >= 3000);
+  checkAchievement('first_blood', true);
+  checkAchievement('level_5', Math.floor(updatedXP / 1000) + 1 >= 5);
+  checkAchievement('error_fixer', mistakeIds.length === 0);
 
-  const finalizeQuiz = () => {
-    const xpGained = (score * XP_PER_CORRECT) + Math.floor(bonusScore / 10);
-    const updatedXP = totalXP + xpGained;
-    setTotalXP(updatedXP);
+  if (newlyUnlocked.length > 0) {
+    setUnlockedAchievements(prev => [...prev, ...newlyUnlocked.map(a => a.id)]);
+    setNewAchievementsThisRound(newlyUnlocked);
+  }
 
-    const newlyUnlocked: Achievement[] = [];
-    const checkAchievement = (id: string, condition: boolean) => {
-      if (condition && !unlockedAchievements.includes(id)) {
-        const ach = ACHIEVEMENTS.find(a => a.id === id);
-        if (ach) newlyUnlocked.push(ach);
-      }
-    };
+  // Save history for unique mode
+  if (quizMode === 'unique') {
+    // Add all question IDs from this round to the history
+    const roundIds = currentQuestions.map(q => q.id);
+    // Avoid duplicates just in case, though set would handle it
+    const newHistory = [...Array.from(new Set([...uniqueUsedIds, ...roundIds]))];
+    setUniqueUsedIds(newHistory);
+  }
 
-    checkAchievement('perfect_score', score === currentQuestions.length && currentQuestions.length === SHUFFLE_COUNT);
-    checkAchievement('speed_demon', bonusScore >= 3000);
-    checkAchievement('first_blood', true);
-    checkAchievement('level_5', Math.floor(updatedXP / 1000) + 1 >= 5);
-    checkAchievement('error_fixer', mistakeIds.length === 0);
+  const randomJoke = ENCOURAGEMENT_JOKES[Math.floor(Math.random() * ENCOURAGEMENT_JOKES.length)];
+  setCurrentJoke(randomJoke);
 
-    if (newlyUnlocked.length > 0) {
-      setUnlockedAchievements(prev => [...prev, ...newlyUnlocked.map(a => a.id)]);
-      setNewAchievementsThisRound(newlyUnlocked);
-    }
+  setView('results');
+};
 
-    const randomJoke = ENCOURAGEMENT_JOKES[Math.floor(Math.random() * ENCOURAGEMENT_JOKES.length)];
-    setCurrentJoke(randomJoke);
+const removeFromMistakes = (id: number) => {
+  const updated = mistakeIds.filter(mid => mid !== id);
+  saveMistakes(updated);
+  if (updated.length === 0 && !unlockedAchievements.includes('error_fixer')) {
+    setUnlockedAchievements(prev => [...prev, 'error_fixer']);
+  }
+};
 
-    setView('results');
-  };
+const renderHome = () => (
+  <div className="flex flex-col items-center justify-center p-6 space-y-8 max-w-4xl mx-auto mt-10">
+    {/* Header & Progression Dashboard */}
+    <div className="w-full space-y-8">
+      <div className="text-center space-y-2">
+        <h1 className="text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
+          ProQuiz Master
+        </h1>
+        <p className="text-slate-400 text-lg">Knowledge is power. Progression is key.</p>
+      </div>
 
-  const removeFromMistakes = (id: number) => {
-    const updated = mistakeIds.filter(mid => mid !== id);
-    saveMistakes(updated);
-    if (updated.length === 0 && !unlockedAchievements.includes('error_fixer')) {
-      setUnlockedAchievements(prev => [...prev, 'error_fixer']);
-    }
-  };
-
-  const renderHome = () => (
-    <div className="flex flex-col items-center justify-center p-6 space-y-8 max-w-4xl mx-auto mt-10">
-      {/* Header & Progression Dashboard */}
-      <div className="w-full space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
-            ProQuiz Master
-          </h1>
-          <p className="text-slate-400 text-lg">Knowledge is power. Progression is key.</p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Level Card */}
-          <div className="glass p-6 rounded-3xl col-span-1 lg:col-span-2 space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-slate-400 text-xs uppercase font-bold tracking-widest">Current Rank</span>
-                <h2 className="text-3xl font-black text-white">Level {currentLevel}</h2>
-              </div>
-              <div className="h-16 w-16 rounded-2xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 text-2xl font-black border border-indigo-500/30">
-                {currentLevel}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm font-bold">
-                <span className="text-indigo-400">{xpInCurrentLevel} XP</span>
-                <span className="text-slate-500">1000 XP</span>
-              </div>
-              <div className="w-full bg-slate-800/50 h-3 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-1000" style={{ width: `${levelProgress}%` }} />
-              </div>
-            </div>
-          </div>
-
-          {/* Stats Card */}
-          <div className="glass p-6 rounded-3xl flex flex-col justify-center space-y-4">
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-violet-600/20 rounded-xl text-violet-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg>
-              </div>
-              <div>
-                <span className="block text-2xl font-black">{unlockedAchievements.length} / {ACHIEVEMENTS.length}</span>
-                <span className="text-slate-500 text-xs uppercase font-bold">Achievements</span>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="p-3 bg-red-600/20 rounded-xl text-red-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4" /><path d="M12 17h.01" /><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /></svg>
-              </div>
-              <div>
-                <span className="block text-2xl font-black">{mistakeIds.length}</span>
-                <span className="text-slate-500 text-xs uppercase font-bold">Errors to fix</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Start Actions */}
-        <div className="w-full glass p-8 rounded-3xl space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Level Card */}
+        <div className="glass p-6 rounded-3xl col-span-1 lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-xl font-bold">Ready to Start?</h3>
-              <p className="text-slate-400 text-sm">Choose your mode and challenge the AI.</p>
+              <span className="text-slate-400 text-xs uppercase font-bold tracking-widest">Current Rank</span>
+              <h2 className="text-3xl font-black text-white">Level {currentLevel}</h2>
             </div>
-            <div className="flex items-center space-x-3 bg-slate-800/40 p-2 rounded-xl border border-white/5">
-              <span className="text-slate-200 text-sm font-bold uppercase tracking-tighter">Timer</span>
-              <button
-                onClick={() => setIsTimerMode(!isTimerMode)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isTimerMode ? 'bg-indigo-600' : 'bg-slate-700'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isTimerMode ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
+            <div className="h-16 w-16 rounded-2xl bg-indigo-600/20 flex items-center justify-center text-indigo-400 text-2xl font-black border border-indigo-500/30">
+              {currentLevel}
             </div>
           </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm font-bold">
+              <span className="text-indigo-400">{xpInCurrentLevel} XP</span>
+              <span className="text-slate-500">1000 XP</span>
+            </div>
+            <div className="w-full bg-slate-800/50 h-3 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-1000" style={{ width: `${levelProgress}%` }} />
+            </div>
+          </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Stats Card */}
+        <div className="glass p-6 rounded-3xl flex flex-col justify-center space-y-4">
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-violet-600/20 rounded-xl text-violet-400">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" /><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" /><path d="M4 22h16" /><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" /><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" /><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" /></svg>
+            </div>
+            <div>
+              <span className="block text-2xl font-black">{unlockedAchievements.length} / {ACHIEVEMENTS.length}</span>
+              <span className="text-slate-500 text-xs uppercase font-bold">Achievements</span>
+            </div>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-red-600/20 rounded-xl text-red-400">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4" /><path d="M12 17h.01" /><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /></svg>
+            </div>
+            <div>
+              <span className="block text-2xl font-black">{mistakeIds.length}</span>
+              <span className="text-slate-500 text-xs uppercase font-bold">Errors to fix</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Start Actions */}
+      <div className="w-full glass p-8 rounded-3xl space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-xl font-bold">Ready to Start?</h3>
+            <p className="text-slate-400 text-sm">Choose your mode and challenge the AI.</p>
+          </div>
+          <div className="flex items-center space-x-3 bg-slate-800/40 p-2 rounded-xl border border-white/5">
+            <span className="text-slate-200 text-sm font-bold uppercase tracking-tighter">Timer</span>
             <button
-              onClick={() => startQuiz('normal')}
-              className="group flex items-center justify-between p-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl shadow-lg transition-all hover:scale-[1.02] active:scale-95 overflow-hidden relative"
+              onClick={() => setIsTimerMode(!isTimerMode)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isTimerMode ? 'bg-indigo-600' : 'bg-slate-700'}`}
             >
-              <div className="relative z-10 text-left">
-                <span className="block text-lg font-black uppercase">Standard Challenge</span>
-                <span className="text-indigo-200 text-sm font-medium">30 Random Questions</span>
-              </div>
-              <svg className="w-8 h-8 opacity-50 group-hover:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-            </button>
-            <button
-              onClick={() => startQuiz('mistakes')}
-              className="group flex items-center justify-between p-6 glass hover:bg-white/10 text-slate-200 rounded-2xl transition-all hover:scale-[1.02] active:scale-95"
-            >
-              <div className="text-left">
-                <span className="block text-lg font-black uppercase">Work on Errors</span>
-                <span className="text-slate-400 text-sm font-medium">{mistakeIds.length} problematic items</span>
-              </div>
-              <svg className="w-8 h-8 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isTimerMode ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
         </div>
 
-        {/* Achievements Grid */}
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 px-2">Achievements Room</h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {ACHIEVEMENTS.map(ach => {
-              const isUnlocked = unlockedAchievements.includes(ach.id);
-              return (
-                <div key={ach.id} className={`glass p-4 rounded-2xl flex flex-col items-center text-center transition-all ${isUnlocked ? 'opacity-100' : 'opacity-30 grayscale'}`} title={ach.description}>
-                  <div className="text-3xl mb-2">{ach.icon}</div>
-                  <span className="text-[10px] font-black uppercase leading-tight tracking-tighter">{ach.name}</span>
-                </div>
-              );
-            })}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <button
+            onClick={() => startQuiz('normal')}
+            className="group flex items-center justify-between p-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl shadow-lg transition-all hover:scale-[1.02] active:scale-95 overflow-hidden relative"
+          >
+            <div className="relative z-10 text-left">
+              <span className="block text-lg font-black uppercase">Standard Challenge</span>
+              <span className="text-indigo-200 text-sm font-medium">30 Random Questions</span>
+            </div>
+            <svg className="w-8 h-8 opacity-50 group-hover:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+          </button>
+          <button
+            onClick={() => startQuiz('unique')}
+            className="group flex items-center justify-between p-6 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-2xl shadow-lg transition-all hover:scale-[1.02] active:scale-95 overflow-hidden relative"
+          >
+            <div className="relative z-10 text-left">
+              <span className="block text-lg font-black uppercase">Adventure Mode</span>
+              <span className="text-violet-200 text-sm font-medium">Unique Questions: {uniqueUsedIds.length}/{QUESTION_POOL.length}</span>
+            </div>
+            <svg className="w-8 h-8 opacity-50 group-hover:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+          </button>
+          <button
+            onClick={() => startQuiz('mistakes')}
+            className="group flex items-center justify-between p-6 glass hover:bg-white/10 text-slate-200 rounded-2xl transition-all hover:scale-[1.02] active:scale-95"
+          >
+            <div className="text-left">
+              <span className="block text-lg font-black uppercase">Work on Errors</span>
+              <span className="text-slate-400 text-sm font-medium">{mistakeIds.length} problematic items</span>
+            </div>
+            <svg className="w-8 h-8 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </button>
+        </div>
+      </div>
+
+      {/* Achievements Grid */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 px-2">Achievements Room</h3>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {ACHIEVEMENTS.map(ach => {
+            const isUnlocked = unlockedAchievements.includes(ach.id);
+            return (
+              <div key={ach.id} className={`glass p-4 rounded-2xl flex flex-col items-center text-center transition-all ${isUnlocked ? 'opacity-100' : 'opacity-30 grayscale'}`} title={ach.description}>
+                <div className="text-3xl mb-2">{ach.icon}</div>
+                <span className="text-[10px] font-black uppercase leading-tight tracking-tighter">{ach.name}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 
-  const renderQuiz = () => {
-    const currentQ = currentQuestions[currentIndex];
-    const progress = ((currentIndex + 1) / currentQuestions.length) * 100;
-    const timeProgress = (timeLeft / TIME_PER_QUESTION) * 100;
+const renderQuiz = () => {
+  const currentQ = currentQuestions[currentIndex];
+  const progress = ((currentIndex + 1) / currentQuestions.length) * 100;
+  const timeProgress = (timeLeft / TIME_PER_QUESTION) * 100;
 
-    return (
-      <div className="max-w-3xl mx-auto p-6 space-y-6 mt-10">
-        <div className="flex items-center justify-between mb-2">
-          <button onClick={() => setView('home')} className="text-slate-500 hover:text-white transition-colors flex items-center gap-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
-            Dashboard
-          </button>
-          <div className="text-slate-400 font-mono text-sm">
-            Question <span className="text-white font-bold">{currentIndex + 1}</span> / {currentQuestions.length}
-          </div>
-        </div>
-
-        <div className="w-full bg-slate-800/50 h-2 rounded-full overflow-hidden">
-          <div className="h-full bg-indigo-500 progress-bar" style={{ width: `${progress}%` }} />
-        </div>
-
-        {isTimerMode && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-end text-xs font-bold uppercase tracking-widest text-slate-500">
-              <span>Time Remaining</span>
-              <span className={timeLeft < 5 ? 'text-red-400 animate-pulse' : 'text-indigo-400'}>{timeLeft}s</span>
-            </div>
-            <div className="w-full bg-slate-800/50 h-1 rounded-full overflow-hidden">
-              <div
-                className={`h-full transition-all duration-1000 linear ${timeLeft < 5 ? 'bg-red-500' : 'bg-indigo-400'}`}
-                style={{ width: `${timeProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="glass p-8 md:p-12 rounded-3xl space-y-8 relative overflow-hidden">
-          <h2 className="text-2xl md:text-3xl font-bold text-center leading-tight">
-            {currentQ.text}
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {shuffledOptions.map((option, idx) => {
-              const isCorrect = option === currentQ.correctAnswer;
-              const isSelected = option === selectedAnswer;
-
-              let buttonClass = "w-full p-5 text-left rounded-2xl border transition-all duration-200 glass font-medium text-lg ";
-              if (isAnswered) {
-                if (isCorrect) buttonClass += "border-emerald-500 bg-emerald-500/20 text-emerald-100 ";
-                else if (isSelected) buttonClass += "border-red-500 bg-red-500/20 text-red-100 shake ";
-                else buttonClass += "border-transparent opacity-50 ";
-              } else {
-                buttonClass += "border-white/10 hover:border-indigo-500 hover:bg-white/5 active:scale-[0.98] ";
-              }
-
-              return (
-                <button
-                  key={idx}
-                  onClick={() => handleAnswer(option)}
-                  disabled={isAnswered}
-                  className={buttonClass}
-                >
-                  <div className="flex items-center space-x-4">
-                    <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 text-sm">{String.fromCharCode(65 + idx)}</span>
-                    <span>{option}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {isAnswered && (
-            <div className="flex justify-center mt-6 animate-in fade-in duration-300">
-              <button
-                onClick={handleNextQuestion}
-                className="px-8 py-3 bg-white text-indigo-900 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-lg active:scale-95 flex items-center gap-2"
-              >
-                {currentIndex < currentQuestions.length - 1 ? 'Next Question' : 'See Results'}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-center items-center gap-12 text-slate-400">
-          <div className="flex flex-col items-center">
-            <span className="text-xs uppercase tracking-tighter">Correct</span>
-            <span className="text-2xl font-black text-white">{score}</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-xs uppercase tracking-tighter">XP Gained</span>
-            <span className="text-2xl font-black text-indigo-400">{score * XP_PER_CORRECT}</span>
-          </div>
-          {isTimerMode && (
-            <div className="flex flex-col items-center">
-              <span className="text-xs uppercase tracking-tighter">Bonus</span>
-              <span className="text-2xl font-black text-amber-400">+{bonusScore}</span>
-            </div>
-          )}
+  return (
+    <div className="max-w-3xl mx-auto p-6 space-y-6 mt-10">
+      <div className="flex items-center justify-between mb-2">
+        <button onClick={() => setView('home')} className="text-slate-500 hover:text-white transition-colors flex items-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
+          Dashboard
+        </button>
+        <div className="text-slate-400 font-mono text-sm">
+          Question <span className="text-white font-bold">{currentIndex + 1}</span> / {currentQuestions.length}
         </div>
       </div>
-    );
-  };
 
-  const renderMistakes = () => {
-    const list = QUESTION_POOL.filter(q => mistakeIds.includes(q.id));
-
-    return (
-      <div className="max-w-4xl mx-auto p-6 space-y-8 mt-10">
-        <div className="flex items-center justify-between">
-          <button onClick={() => setView('home')} className="text-slate-400 hover:text-white transition-colors flex items-center gap-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
-            Dashboard
-          </button>
-          <h2 className="text-3xl font-black">Error History</h2>
-          <button
-            onClick={() => startQuiz('mistakes')}
-            className="px-6 py-2 bg-indigo-600 rounded-full font-bold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20"
-          >
-            Practice Errors
-          </button>
-        </div>
-
-        {list.length === 0 ? (
-          <div className="glass p-20 rounded-3xl text-center space-y-4">
-            <div className="text-6xl">💎</div>
-            <p className="text-xl font-medium text-slate-300">Clean slate! You've mastered everything.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {list.map(q => (
-              <div key={q.id} className="glass p-6 rounded-2xl flex items-center justify-between group border border-white/5 hover:border-white/10 transition-all">
-                <div className="space-y-1">
-                  <p className="font-semibold text-lg">{q.text}</p>
-                  <p className="text-emerald-400 text-sm font-medium">Answer: {q.correctAnswer}</p>
-                </div>
-                <button
-                  onClick={() => removeFromMistakes(q.id)}
-                  className="p-3 rounded-xl bg-slate-800/50 text-slate-400 hover:bg-red-500/20 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100"
-                  title="Mark as learned"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="w-full bg-slate-800/50 h-2 rounded-full overflow-hidden">
+        <div className="h-full bg-indigo-500 progress-bar" style={{ width: `${progress}%` }} />
       </div>
-    );
-  };
 
-  const renderResults = () => {
-    const accuracy = Math.round((score / currentQuestions.length) * 100);
-    const xpGained = (score * XP_PER_CORRECT) + Math.floor(bonusScore / 10);
+      {isTimerMode && (
+        <div className="space-y-2">
+          <div className="flex justify-between items-end text-xs font-bold uppercase tracking-widest text-slate-500">
+            <span>Time Remaining</span>
+            <span className={timeLeft < 5 ? 'text-red-400 animate-pulse' : 'text-indigo-400'}>{timeLeft}s</span>
+          </div>
+          <div className="w-full bg-slate-800/50 h-1 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-1000 linear ${timeLeft < 5 ? 'bg-red-500' : 'bg-indigo-400'}`}
+              style={{ width: `${timeProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
-    const isPassed = score >= 15;
+      <div className="glass p-8 md:p-12 rounded-3xl space-y-8 relative overflow-hidden">
+        <h2 className="text-2xl md:text-3xl font-bold text-center leading-tight">
+          {currentQ.text}
+        </h2>
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {shuffledOptions.map((option, idx) => {
+            const isCorrect = option === currentQ.correctAnswer;
+            const isSelected = option === selectedAnswer;
 
-
-    const handleShare = async () => {
-      const element = document.getElementById('result-card');
-      if (!element) return;
-
-      try {
-        const canvas = await html2canvas(element, {
-          backgroundColor: '#0f172a', // Force dark background (Slate 900)
-          scale: 2
-        });
-
-        canvas.toBlob(async (blob) => {
-          if (!blob) return;
-
-          const file = new File([blob], 'quiz-result.png', { type: 'image/png' });
-
-          // Try native sharing first (for mobile)
-          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({
-                title: 'My Quiz Result',
-                text: 'Check out my score on ProQuiz Master!',
-                files: [file]
-              });
-              return;
-            } catch (shareErr) {
-              console.log('Share canceled or failed, falling back to clipboard', shareErr);
+            let buttonClass = "w-full p-5 text-left rounded-2xl border transition-all duration-200 glass font-medium text-lg ";
+            if (isAnswered) {
+              if (isCorrect) buttonClass += "border-emerald-500 bg-emerald-500/20 text-emerald-100 ";
+              else if (isSelected) buttonClass += "border-red-500 bg-red-500/20 text-red-100 shake ";
+              else buttonClass += "border-transparent opacity-50 ";
+            } else {
+              buttonClass += "border-white/10 hover:border-indigo-500 hover:bg-white/5 active:scale-[0.98] ";
             }
-          }
 
-          // Fallback to clipboard
-          try {
-            const item = new ClipboardItem({ 'image/png': blob });
-            await navigator.clipboard.write([item]);
-            setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
-          } catch (writeErr) {
-            console.error('Clipboard write failed', writeErr);
-            alert('Share not supported. Please take a screenshot manually!');
-          }
-        });
-      } catch (err) {
-        console.error('Failed to capture:', err);
-      }
-    };
-
-    return (
-      <div className="flex flex-col items-center justify-center p-6 space-y-8 max-w-2xl mx-auto mt-10">
-        <div id="result-card" className="bg-slate-900 p-12 rounded-[2.5rem] w-full text-center space-y-10 relative overflow-hidden shadow-2xl border border-slate-800">
-          <div className={`absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${quizMode === 'mistakes'
-            ? 'from-indigo-500 via-purple-500 to-indigo-500' // Neutral/Progress gradient for mistakes
-            : isPassed
-              ? 'from-emerald-500 via-green-500 to-emerald-500'
-              : 'from-red-500 via-orange-500 to-red-500'
-            }`}
-          />
-
-          <div className="space-y-4">
-            <h2 className={`text-5xl font-black italic uppercase tracking-tighter ${quizMode === 'mistakes' ? 'text-indigo-200' : (isPassed ? 'text-white' : 'text-red-200')
-              }`}>
-              {quizMode === 'mistakes'
-                ? (score === currentQuestions.length ? 'ОТЛИЧНО!' : 'Результат')
-                : (isPassed ? 'СДАЛ!' : 'НЕ СДАЛ')
-              }
-            </h2>
-            <p className="text-slate-400 font-medium text-lg px-4">
-              {quizMode === 'mistakes'
-                ? `Вы проработали ${score} из ${currentQuestions.length} ошибок.`
-                : (isPassed
-                  ? `Отличная работа! Вы разбираетесь в политике. (${accuracy}% правильных)`
-                  : `${currentJoke} (${accuracy}% правильных)`)
-              }
-              {quizMode === 'mistakes' && score === currentQuestions.length && (
-                <>
-                  <br />
-                  <span className="text-emerald-400 font-bold block mt-2">Так держать! Ошибок больше нет.</span>
-                </>
-              )}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">Score</span>
-              <span className="text-2xl font-black">{score}/{currentQuestions.length}</span>
-            </div>
-            <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">Accuracy</span>
-              <span className="text-2xl font-black text-indigo-400">{accuracy}%</span>
-            </div>
-            <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">Bonus</span>
-              <span className="text-2xl font-black text-amber-400">{bonusScore}</span>
-            </div>
-            <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
-              <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">XP</span>
-              <span className="text-2xl font-black text-emerald-400">+{xpGained}</span>
-            </div>
-          </div>
-
-          {newAchievementsThisRound.length > 0 && (
-            <div className="space-y-4 animate-bounce">
-              <span className="text-amber-400 text-xs font-black uppercase tracking-[0.3em]">Achievements Unlocked!</span>
-              <div className="flex flex-wrap justify-center gap-3">
-                {newAchievementsThisRound.map(ach => (
-                  <div key={ach.id} className="flex items-center gap-2 bg-amber-500/20 border border-amber-500/50 px-4 py-2 rounded-full">
-                    <span>{ach.icon}</span>
-                    <span className="text-amber-200 text-sm font-black uppercase tracking-tight">{ach.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 pt-4" data-html2canvas-ignore>
-            <button
-              onClick={handleShare}
-              className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all hover:scale-[1.01] active:scale-95 shadow-xl flex items-center justify-center gap-2"
-            >
-              {isCopied ? (
-                <>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
-                  Copied Image to Clipboard!
-                </>
-              ) : (
-                <>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
-                  Share Result Image
-                </>
-              )}
-            </button>
-            <div className="flex gap-4">
+            return (
               <button
-                onClick={() => setView('home')}
-                className="flex-1 py-4 bg-white/5 text-slate-300 font-bold rounded-2xl hover:bg-white/10 transition-all border border-white/5"
+                key={idx}
+                onClick={() => handleAnswer(option)}
+                disabled={isAnswered}
+                className={buttonClass}
               >
-                Dashboard
+                <div className="flex items-center space-x-4">
+                  <span className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/5 text-slate-400 text-sm">{String.fromCharCode(65 + idx)}</span>
+                  <span>{option}</span>
+                </div>
               </button>
-              <button
-                onClick={() => startQuiz('normal')}
-                className="flex-1 py-4 bg-white text-indigo-900 font-black rounded-2xl hover:bg-slate-100 transition-all"
-              >
-                Play Again
-              </button>
-            </div>
-          </div>
+            );
+          })}
         </div>
+
+        {isAnswered && (
+          <div className="flex justify-center mt-6 animate-in fade-in duration-300">
+            <button
+              onClick={handleNextQuestion}
+              className="px-8 py-3 bg-white text-indigo-900 font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-lg active:scale-95 flex items-center gap-2"
+            >
+              {currentIndex < currentQuestions.length - 1 ? 'Next Question' : 'See Results'}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14" /><path d="m12 5 7 7-7 7" /></svg>
+            </button>
+          </div>
+        )}
       </div>
-    );
+
+      <div className="flex justify-center items-center gap-12 text-slate-400">
+        <div className="flex flex-col items-center">
+          <span className="text-xs uppercase tracking-tighter">Correct</span>
+          <span className="text-2xl font-black text-white">{score}</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-xs uppercase tracking-tighter">XP Gained</span>
+          <span className="text-2xl font-black text-indigo-400">{score * XP_PER_CORRECT}</span>
+        </div>
+        {isTimerMode && (
+          <div className="flex flex-col items-center">
+            <span className="text-xs uppercase tracking-tighter">Bonus</span>
+            <span className="text-2xl font-black text-amber-400">+{bonusScore}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const renderMistakes = () => {
+  const list = QUESTION_POOL.filter(q => mistakeIds.includes(q.id));
+
+  return (
+    <div className="max-w-4xl mx-auto p-6 space-y-8 mt-10">
+      <div className="flex items-center justify-between">
+        <button onClick={() => setView('home')} className="text-slate-400 hover:text-white transition-colors flex items-center gap-2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6" /></svg>
+          Dashboard
+        </button>
+        <h2 className="text-3xl font-black">Error History</h2>
+        <button
+          onClick={() => startQuiz('mistakes')}
+          className="px-6 py-2 bg-indigo-600 rounded-full font-bold hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/20"
+        >
+          Practice Errors
+        </button>
+      </div>
+
+      {list.length === 0 ? (
+        <div className="glass p-20 rounded-3xl text-center space-y-4">
+          <div className="text-6xl">💎</div>
+          <p className="text-xl font-medium text-slate-300">Clean slate! You've mastered everything.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {list.map(q => (
+            <div key={q.id} className="glass p-6 rounded-2xl flex items-center justify-between group border border-white/5 hover:border-white/10 transition-all">
+              <div className="space-y-1">
+                <p className="font-semibold text-lg">{q.text}</p>
+                <p className="text-emerald-400 text-sm font-medium">Answer: {q.correctAnswer}</p>
+              </div>
+              <button
+                onClick={() => removeFromMistakes(q.id)}
+                className="p-3 rounded-xl bg-slate-800/50 text-slate-400 hover:bg-red-500/20 hover:text-red-400 transition-all opacity-0 group-hover:opacity-100"
+                title="Mark as learned"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const renderResults = () => {
+  const accuracy = Math.round((score / currentQuestions.length) * 100);
+  const xpGained = (score * XP_PER_CORRECT) + Math.floor(bonusScore / 10);
+
+  const isPassed = score >= 15;
+
+
+
+  const handleShare = async () => {
+    const element = document.getElementById('result-card');
+    if (!element) return;
+
+    try {
+      const canvas = await html2canvas(element, {
+        backgroundColor: '#0f172a', // Force dark background (Slate 900)
+        scale: 2
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+
+        const file = new File([blob], 'quiz-result.png', { type: 'image/png' });
+
+        // Try native sharing first (for mobile)
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: 'My Quiz Result',
+              text: 'Check out my score on ProQuiz Master!',
+              files: [file]
+            });
+            return;
+          } catch (shareErr) {
+            console.log('Share canceled or failed, falling back to clipboard', shareErr);
+          }
+        }
+
+        // Fallback to clipboard
+        try {
+          const item = new ClipboardItem({ 'image/png': blob });
+          await navigator.clipboard.write([item]);
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2000);
+        } catch (writeErr) {
+          console.error('Clipboard write failed', writeErr);
+          alert('Share not supported. Please take a screenshot manually!');
+        }
+      });
+    } catch (err) {
+      console.error('Failed to capture:', err);
+    }
   };
 
   return (
-    <div className="min-h-screen pb-20 selection:bg-indigo-500 selection:text-white">
-      <nav className="p-6 flex justify-between items-center max-w-6xl mx-auto border-b border-white/5 mb-4">
-        <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setView('home')}>
-          <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-indigo-600/20 group-hover:scale-110 transition-transform">Q</div>
-          <div>
-            <span className="font-black text-xl tracking-tighter block leading-none">PROQUIZ</span>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mastery Edition</span>
+    <div className="flex flex-col items-center justify-center p-6 space-y-8 max-w-2xl mx-auto mt-10">
+      <div id="result-card" className="bg-slate-900 p-12 rounded-[2.5rem] w-full text-center space-y-10 relative overflow-hidden shadow-2xl border border-slate-800">
+        <div className={`absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${quizMode === 'mistakes'
+          ? 'from-indigo-500 via-purple-500 to-indigo-500' // Neutral/Progress gradient for mistakes
+          : isPassed
+            ? 'from-emerald-500 via-green-500 to-emerald-500'
+            : 'from-red-500 via-orange-500 to-red-500'
+          }`}
+        />
+
+        <div className="space-y-4">
+          <h2 className={`text-5xl font-black italic uppercase tracking-tighter ${quizMode === 'mistakes' ? 'text-indigo-200' : (isPassed ? 'text-white' : 'text-red-200')
+            }`}>
+            {quizMode === 'mistakes'
+              ? (score === currentQuestions.length ? 'ОТЛИЧНО!' : 'Результат')
+              : (isPassed ? 'СДАЛ!' : 'НЕ СДАЛ')
+            }
+          </h2>
+          <p className="text-slate-400 font-medium text-lg px-4">
+            {quizMode === 'mistakes'
+              ? `Вы проработали ${score} из ${currentQuestions.length} ошибок.`
+              : (isPassed
+                ? `Отличная работа! Вы разбираетесь в политике. (${accuracy}% правильных)`
+                : `${currentJoke} (${accuracy}% правильных)`)
+            }
+            {quizMode === 'mistakes' && score === currentQuestions.length && (
+              <>
+                <br />
+                <span className="text-emerald-400 font-bold block mt-2">Так держать! Ошибок больше нет.</span>
+              </>
+            )}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
+            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">Score</span>
+            <span className="text-2xl font-black">{score}/{currentQuestions.length}</span>
+          </div>
+          <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
+            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">Accuracy</span>
+            <span className="text-2xl font-black text-indigo-400">{accuracy}%</span>
+          </div>
+          <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
+            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">Bonus</span>
+            <span className="text-2xl font-black text-amber-400">{bonusScore}</span>
+          </div>
+          <div className="flex flex-col items-center p-4 rounded-2xl bg-white/5 border border-white/5">
+            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">XP</span>
+            <span className="text-2xl font-black text-emerald-400">+{xpGained}</span>
           </div>
         </div>
 
-        <div className="hidden md:flex items-center space-x-12">
+        {newAchievementsThisRound.length > 0 && (
+          <div className="space-y-4 animate-bounce">
+            <span className="text-amber-400 text-xs font-black uppercase tracking-[0.3em]">Achievements Unlocked!</span>
+            <div className="flex flex-wrap justify-center gap-3">
+              {newAchievementsThisRound.map(ach => (
+                <div key={ach.id} className="flex items-center gap-2 bg-amber-500/20 border border-amber-500/50 px-4 py-2 rounded-full">
+                  <span>{ach.icon}</span>
+                  <span className="text-amber-200 text-sm font-black uppercase tracking-tight">{ach.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-4 pt-4" data-html2canvas-ignore>
           <button
-            onClick={() => setView('home')}
-            className={`font-black text-xs uppercase tracking-widest transition-colors ${view === 'home' ? 'text-indigo-400' : 'text-slate-500 hover:text-white'}`}
+            onClick={handleShare}
+            className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-500 transition-all hover:scale-[1.01] active:scale-95 shadow-xl flex items-center justify-center gap-2"
           >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setView('mistakes')}
-            className={`font-black text-xs uppercase tracking-widest transition-colors relative ${view === 'mistakes' ? 'text-indigo-400' : 'text-slate-500 hover:text-white'}`}
-          >
-            Mistakes
-            {mistakeIds.length > 0 && (
-              <span className="absolute -top-3 -right-5 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-black shadow-lg">
-                {mistakeIds.length}
-              </span>
+            {isCopied ? (
+              <>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+                Copied Image to Clipboard!
+              </>
+            ) : (
+              <>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
+                Share Result Image
+              </>
             )}
           </button>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setView('home')}
+              className="flex-1 py-4 bg-white/5 text-slate-300 font-bold rounded-2xl hover:bg-white/10 transition-all border border-white/5"
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => startQuiz(quizMode === 'unique' ? 'unique' : 'normal')}
+              className="flex-1 py-4 bg-white text-indigo-900 font-black rounded-2xl hover:bg-slate-100 transition-all"
+            >
+              {quizMode === 'unique' ? 'Next Batch' : 'Play Again'}
+            </button>
+          </div>
         </div>
-      </nav>
-
-      <main className="animate-in fade-in duration-500">
-        {view === 'home' && renderHome()}
-        {view === 'quiz' && renderQuiz()}
-        {view === 'mistakes' && renderMistakes()}
-        {view === 'results' && renderResults()}
-      </main>
+      </div>
     </div>
   );
+};
+
+return (
+  <div className="min-h-screen pb-20 selection:bg-indigo-500 selection:text-white">
+    <nav className="p-6 flex justify-between items-center max-w-6xl mx-auto border-b border-white/5 mb-4">
+      <div className="flex items-center space-x-3 cursor-pointer group" onClick={() => setView('home')}>
+        <div className="w-11 h-11 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-indigo-600/20 group-hover:scale-110 transition-transform">Q</div>
+        <div>
+          <span className="font-black text-xl tracking-tighter block leading-none">PROQUIZ</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Mastery Edition</span>
+        </div>
+      </div>
+
+      <div className="hidden md:flex items-center space-x-12">
+        <button
+          onClick={() => setView('home')}
+          className={`font-black text-xs uppercase tracking-widest transition-colors ${view === 'home' ? 'text-indigo-400' : 'text-slate-500 hover:text-white'}`}
+        >
+          Dashboard
+        </button>
+        <button
+          onClick={() => setView('mistakes')}
+          className={`font-black text-xs uppercase tracking-widest transition-colors relative ${view === 'mistakes' ? 'text-indigo-400' : 'text-slate-500 hover:text-white'}`}
+        >
+          Mistakes
+          {mistakeIds.length > 0 && (
+            <span className="absolute -top-3 -right-5 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center font-black shadow-lg">
+              {mistakeIds.length}
+            </span>
+          )}
+        </button>
+      </div>
+    </nav>
+
+    <main className="animate-in fade-in duration-500">
+      {view === 'home' && renderHome()}
+      {view === 'quiz' && renderQuiz()}
+      {view === 'mistakes' && renderMistakes()}
+      {view === 'results' && renderResults()}
+    </main>
+  </div>
+);
 };
 
 const root = createRoot(document.getElementById('root')!);
