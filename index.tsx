@@ -3109,6 +3109,7 @@ const App = () => {
   const [newAchievementsThisRound, setNewAchievementsThisRound] = useState<Achievement[]>([]);
   const [isCopied, setIsCopied] = useState(false);
   const [currentJoke, setCurrentJoke] = useState('');
+  const [quizMode, setQuizMode] = useState<'normal' | 'mistakes'>('normal');
 
   // Computed Values
   const currentLevel = Math.floor(totalXP / 1000) + 1;
@@ -3146,7 +3147,9 @@ const App = () => {
     setCurrentIndex(0);
     setScore(0);
     setBonusScore(0);
+
     setNewAchievementsThisRound([]);
+    setQuizMode(mode);
     setView('quiz');
     setupQuestion(pool[0]);
   };
@@ -3574,16 +3577,35 @@ const App = () => {
     return (
       <div className="flex flex-col items-center justify-center p-6 space-y-8 max-w-2xl mx-auto mt-10">
         <div id="result-card" className="bg-slate-900 p-12 rounded-[2.5rem] w-full text-center space-y-10 relative overflow-hidden shadow-2xl border border-slate-800">
-          <div className={`absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${isPassed ? 'from-emerald-500 via-green-500 to-emerald-500' : 'from-red-500 via-orange-500 to-red-500'}`} />
+          <div className={`absolute top-0 left-0 w-full h-2 bg-gradient-to-r ${quizMode === 'mistakes'
+            ? 'from-indigo-500 via-purple-500 to-indigo-500' // Neutral/Progress gradient for mistakes
+            : isPassed
+              ? 'from-emerald-500 via-green-500 to-emerald-500'
+              : 'from-red-500 via-orange-500 to-red-500'
+            }`}
+          />
 
           <div className="space-y-4">
-            <h2 className={`text-5xl font-black italic uppercase tracking-tighter ${isPassed ? 'text-white' : 'text-red-200'}`}>
-              {isPassed ? 'СДАЛ!' : 'НЕ СДАЛ'}
+            <h2 className={`text-5xl font-black italic uppercase tracking-tighter ${quizMode === 'mistakes' ? 'text-indigo-200' : (isPassed ? 'text-white' : 'text-red-200')
+              }`}>
+              {quizMode === 'mistakes'
+                ? (score === currentQuestions.length ? 'ОТЛИЧНО!' : 'Результат')
+                : (isPassed ? 'СДАЛ!' : 'НЕ СДАЛ')
+              }
             </h2>
             <p className="text-slate-400 font-medium text-lg px-4">
-              {isPassed
-                ? 'Отличная работа! Вы разбираетесь в политике.'
-                : currentJoke}
+              {quizMode === 'mistakes'
+                ? `Вы проработали ${score} из ${currentQuestions.length} ошибок.`
+                : (isPassed
+                  ? 'Отличная работа! Вы разбираетесь в политике.'
+                  : currentJoke)
+              }
+              {quizMode === 'mistakes' && score === currentQuestions.length && (
+                <>
+                  <br />
+                  <span className="text-emerald-400 font-bold block mt-2">Так держать! Ошибок больше нет.</span>
+                </>
+              )}
             </p>
           </div>
 
