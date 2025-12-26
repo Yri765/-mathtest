@@ -2383,21 +2383,21 @@ const App = () => {
   const [score, setScore] = useState(0);
   const [bonusScore, setBonusScore] = useState(0);
   const [mistakeIds, setMistakeIds] = useState<number[]>(() => {
-    const saved = localStorage.getItem('quiz_mistakes');
+    const saved = localStorage.getItem('mathtest_mistakes');
     return saved ? JSON.parse(saved) : [];
   });
 
   // Progression State
   const [totalXP, setTotalXP] = useState<number>(() => {
-    const saved = localStorage.getItem('quiz_xp');
+    const saved = localStorage.getItem('mathtest_xp');
     return saved ? parseInt(saved) : 0;
   });
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(() => {
-    const saved = localStorage.getItem('quiz_achievements');
+    const saved = localStorage.getItem('mathtest_achievements');
     return saved ? JSON.parse(saved) : [];
   });
   const [uniqueUsedIds, setUniqueUsedIds] = useState<number[]>(() => {
-    const saved = localStorage.getItem('quiz_unique_history');
+    const saved = localStorage.getItem('mathtest_unique_history');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -2417,15 +2417,15 @@ const App = () => {
 
   // Persistence
   useEffect(() => {
-    localStorage.setItem('quiz_xp', totalXP.toString());
+    localStorage.setItem('mathtest_xp', totalXP.toString());
   }, [totalXP]);
 
   useEffect(() => {
-    localStorage.setItem('quiz_achievements', JSON.stringify(unlockedAchievements));
+    localStorage.setItem('mathtest_achievements', JSON.stringify(unlockedAchievements));
   }, [unlockedAchievements]);
 
   useEffect(() => {
-    localStorage.setItem('quiz_unique_history', JSON.stringify(uniqueUsedIds));
+    localStorage.setItem('mathtest_unique_history', JSON.stringify(uniqueUsedIds));
   }, [uniqueUsedIds]);
 
   // Helpers
@@ -2440,7 +2440,7 @@ const App = () => {
 
   const saveMistakes = (ids: number[]) => {
     setMistakeIds(ids);
-    localStorage.setItem('quiz_mistakes', JSON.stringify(ids));
+    localStorage.setItem('mathtest_mistakes', JSON.stringify(ids));
   };
 
   const startQuiz = (mode: 'normal' | 'mistakes' | 'unique' | 'theory') => {
