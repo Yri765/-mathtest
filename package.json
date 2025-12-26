@@ -1,5 +1,6 @@
 {
-  "name": "",
+  "name": "mathtest",
+  "homepage": "https://Yri765.github.io/-mathtest",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,8 +13,10 @@
   },
   "dependencies": {
     "html2canvas": "^1.4.1",
+    "katex": "^0.16.27",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "react-latex-next": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
