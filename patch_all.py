@@ -14,18 +14,21 @@ def parse_questions(md_path):
     a_pattern = re.compile(r'^Ответ:\s*(.*)')
     
     current_question = None
-    current_type = 'practice' # Default type
+    current_type = 'practice' 
+    current_section = 'general'
     
     for line in lines:
         line = line.strip()
         if not line:
             continue
             
-        # Check Section more loosely
+        # Check Section
         if line.startswith('#'):
-            section_name = line.strip('#').strip().lower()
+            section_name = line.strip('#').strip()
+            current_section = section_name
             print(f"Found section: {section_name}")
-            if 'теория' in section_name:
+            
+            if 'теория' in section_name.lower():
                 current_type = 'theory'
             else:
                 current_type = 'practice'
@@ -37,7 +40,8 @@ def parse_questions(md_path):
             q_text = q_match.group(2)
             current_question = {
                 'text': q_text,
-                'type': current_type
+                'type': current_type,
+                'section': current_section
             }
         
         # Check Answer
@@ -52,15 +56,50 @@ def parse_questions(md_path):
 def update_index(new_questions):
     ts_path = 'c:/Users/User/Downloads/zip/index.tsx'
     
-    all_answers = [q['correctAnswer'] for q in new_questions]
+    # 1. Group answers by section
+    answers_by_section = {}
+    all_answers = []
     
+    for q in new_questions:
+        sec = q.get('section', 'general')
+        ans = q['correctAnswer']
+        
+        if sec not in answers_by_section:
+            answers_by_section[sec] = []
+        
+        # Avoid duplicates within section pool to keep probability fair? 
+        # Actually set is better to avoid exact duplicate options
+        answers_by_section[sec].append(ans)
+        all_answers.append(ans)
+
+    # 2. Build final questions with context-aware distractors
     final_questions = []
     for i, q in enumerate(new_questions):
         correct = q['correctAnswer']
-        potential = [a for a in all_answers if a != correct]
-        # Pick 3 random
-        distractors = random.sample(potential, 3) if len(potential) >=3 else potential
+        sec = q.get('section', 'general')
         
+        # Get potential distractors from same section
+        section_pool = answers_by_section.get(sec, [])
+        potential = [a for a in section_pool if a != correct]
+        # Remove duplicates
+        potential = list(set(potential))
+        
+        # If not enough context answers (need 3), borrow from global pool
+        if len(potential) < 3:
+            global_pool = [a for a in all_answers if a != correct]
+            needed = 3 - len(potential)
+            # Prioritize global pool that isn't already in potential
+            global_pool = list(set(global_pool) - set(potential))
+            if len(global_pool) >= needed:
+                potential.extend(random.sample(global_pool, needed))
+        
+        # Check again if we have enough
+        if len(potential) >= 3:
+            distractors = random.sample(potential, 3)
+        else:
+            # Should rarely happen with this dataset
+            distractors = potential
+            
         options = [correct] + distractors
         random.shuffle(options)
         
@@ -70,6 +109,8 @@ def update_index(new_questions):
             "options": options,
             "correctAnswer": correct,
             "type": q['type']
+            # We don't necessarily need to save 'section' to index.tsx unless UI uses it, 
+            # but getting the type correct is key.
         }
         final_questions.append(final_q)
         
@@ -91,6 +132,7 @@ def update_index(new_questions):
         theory_count = sum(1 for q in final_questions if q['type'] == 'theory')
         print(f"Theory questions: {theory_count}")
         print(f"Practice questions: {len(final_questions) - theory_count}")
+        print("Distractors generated contextually by section.")
     else:
         print("Could not find QUESTION_POOL in index.tsx")
 
