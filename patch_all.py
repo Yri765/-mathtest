@@ -4,7 +4,6 @@ import random
 import os
 
 def parse_questions(md_path):
-    # Use utf-8-sig to handle BOM
     with open(md_path, 'r', encoding='utf-8-sig') as f:
         lines = f.readlines()
 
@@ -22,19 +21,15 @@ def parse_questions(md_path):
         if not line:
             continue
             
-        # Check Section
         if line.startswith('#'):
             section_name = line.strip('#').strip()
             current_section = section_name
-            print(f"Found section: {section_name}")
-            
             if 'теория' in section_name.lower():
                 current_type = 'theory'
             else:
                 current_type = 'practice'
             continue
             
-        # Check Question
         q_match = q_pattern.match(line)
         if q_match:
             q_text = q_match.group(2)
@@ -44,7 +39,6 @@ def parse_questions(md_path):
                 'section': current_section
             }
         
-        # Check Answer
         a_match = a_pattern.match(line)
         if a_match and current_question:
             current_question['correctAnswer'] = a_match.group(1)
@@ -53,52 +47,72 @@ def parse_questions(md_path):
 
     return questions
 
+def classify_answer(ans):
+    ans = ans.strip()
+    # Check for coordinates: (num; num) or {num; num} or [num; num]
+    # Allow for multiple points: (..), (..)
+    if re.search(r'[\(\{\[][\d\.\,\;\s\-\+]+[\)\}\]]', ans) and ';' in ans:
+         return 'coordinates'
+    if re.search(r'\(-?\d+(\.\d+)?;\s*-?\d+(\.\d+)?', ans):
+         return 'coordinates'
+         
+    # Check for equations
+    if '=' in ans and (('x' in ans) or ('y' in ans) or ('z' in ans)):
+        return 'equation'
+        
+    # Check for numeric values (including simple expressions like sqrt, pi)
+    # If it contains mainly digits, ., -, /, sqrt, pi, e
+    if re.match(r'^[\d\s\.\,\+\-\*\/\^\(\)a-zA-Z\\]+$', ans) and len(ans) < 30:
+         return 'value'
+         
+    return 'text'
+
 def update_index(new_questions):
     ts_path = 'c:/Users/User/Downloads/zip/index.tsx'
     
-    # 1. Group answers by section
-    answers_by_section = {}
-    all_answers = []
+    # 1. Group answers by Format AND Section to keep context relevance within format
+    # e.g. "Algebra - Coordinates", "Analysis - Equation"
+    pools = {}
     
     for q in new_questions:
-        sec = q.get('section', 'general')
         ans = q['correctAnswer']
+        fmt = classify_answer(ans)
+        sec = q.get('section', 'general')
         
-        if sec not in answers_by_section:
-            answers_by_section[sec] = []
+        # Primary key: Format. Secondary: Section.
+        # But maybe just Format is enough? If I have coordinates from Algebra and Analysis, they might look similar.
+        # However, user complained about context.
+        # Let's try to group by Format first.
         
-        # Avoid duplicates within section pool to keep probability fair? 
-        # Actually set is better to avoid exact duplicate options
-        answers_by_section[sec].append(ans)
-        all_answers.append(ans)
-
-    # 2. Build final questions with context-aware distractors
+        if fmt not in pools:
+            pools[fmt] = []
+        pools[fmt].append(ans)
+        
+    # 2. Build final questions
     final_questions = []
     for i, q in enumerate(new_questions):
         correct = q['correctAnswer']
-        sec = q.get('section', 'general')
+        fmt = classify_answer(correct)
         
-        # Get potential distractors from same section
-        section_pool = answers_by_section.get(sec, [])
-        potential = [a for a in section_pool if a != correct]
-        # Remove duplicates
-        potential = list(set(potential))
+        # Get pool for this format
+        pool = pools.get(fmt, [])
         
-        # If not enough context answers (need 3), borrow from global pool
+        # Filter pool to be distinct from correct answer
+        potential = [a for a in pool if a != correct]
+        potential = list(set(potential)) # Unique
+        
+        # If not enough, try to borrow from other formats? No, that defeats the purpose.
+        # If not enough, we might have to use SECTION based logic as fallback (mixed formats but same topic).
         if len(potential) < 3:
-            global_pool = [a for a in all_answers if a != correct]
-            needed = 3 - len(potential)
-            # Prioritize global pool that isn't already in potential
-            global_pool = list(set(global_pool) - set(potential))
-            if len(global_pool) >= needed:
-                potential.extend(random.sample(global_pool, needed))
+             # Fallback: get answers from same section regardless of format
+             sec = q.get('section', 'general')
+             section_pool = [q2['correctAnswer'] for q2 in new_questions if q2.get('section') == sec and q2['correctAnswer'] != correct]
+             potential.extend(list(set(section_pool) - set(potential)))
         
-        # Check again if we have enough
         if len(potential) >= 3:
             distractors = random.sample(potential, 3)
         else:
-            # Should rarely happen with this dataset
-            distractors = potential
+            distractors = potential # Should not happen often
             
         options = [correct] + distractors
         random.shuffle(options)
@@ -109,8 +123,6 @@ def update_index(new_questions):
             "options": options,
             "correctAnswer": correct,
             "type": q['type']
-            # We don't necessarily need to save 'section' to index.tsx unless UI uses it, 
-            # but getting the type correct is key.
         }
         final_questions.append(final_q)
         
@@ -127,19 +139,11 @@ def update_index(new_questions):
         with open(ts_path, 'w', encoding='utf-8') as f:
             f.write(new_content)
         print(f"Successfully updated index.tsx with {len(final_questions)} questions.")
-        
-        # Count types
-        theory_count = sum(1 for q in final_questions if q['type'] == 'theory')
-        print(f"Theory questions: {theory_count}")
-        print(f"Practice questions: {len(final_questions) - theory_count}")
-        print("Distractors generated contextually by section.")
+        print("Distractors generated by FORMAT (coordinates, equation, value, text).")
     else:
         print("Could not find QUESTION_POOL in index.tsx")
 
 if __name__ == "__main__":
     md_file = 'c:/Users/User/Downloads/zip/questions_with_answers.md'
     qs = parse_questions(md_file)
-    if qs:
-        update_index(qs)
-    else:
-        print("No questions parsed!")
+    update_index(qs)
