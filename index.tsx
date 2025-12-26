@@ -966,10 +966,10 @@ const QUESTION_POOL: Question[] = [
     "options": [
       "$2x + 9y + z - 27 = 0$ ($\\vec{n} = \\vec{a} \\times \\vec{b} = \\{2; 9; 1\\}$. $2(x-2)+9(y-3)+1(z+4)=0 \\Rightarrow 2x+9y+z-4-27+4=0 \\Rightarrow 2x+9y+z-27=0$)",
       "-1",
-      "$5x - 5y - 15 = 0$ (или $x - y - 3 = 0$)",
+      "$$8x - 5y - 24 = 0$$",
       "10 ($x^2/4 + y^2/100 = 1 \\Rightarrow b=10$)"
     ],
-    "correctAnswer": "$5x - 5y - 15 = 0$ (или $x - y - 3 = 0$)",
+    "correctAnswer": "$$8x - 5y - 24 = 0$$",
     "type": "practice"
   },
   {
