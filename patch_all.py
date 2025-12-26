@@ -4,19 +4,15 @@ import random
 import os
 
 def parse_questions(md_path):
-    with open(md_path, 'r', encoding='utf-8') as f:
+    # Use utf-8-sig to handle BOM
+    with open(md_path, 'r', encoding='utf-8-sig') as f:
         lines = f.readlines()
 
     questions = []
     
-    # Patterns
-    # 52. Question text?
     q_pattern = re.compile(r'^(\d+)\.\s+(.*)')
-    # Ответ: Answer text
     a_pattern = re.compile(r'^Ответ:\s*(.*)')
-    # Section header
-    section_pattern = re.compile(r'^#\s+(.*)')
-
+    
     current_question = None
     current_type = 'practice' # Default type
     
@@ -25,10 +21,10 @@ def parse_questions(md_path):
         if not line:
             continue
             
-        # Check Section
-        sec_match = section_pattern.match(line)
-        if sec_match:
-            section_name = sec_match.group(1).lower()
+        # Check Section more loosely
+        if line.startswith('#'):
+            section_name = line.strip('#').strip().lower()
+            print(f"Found section: {section_name}")
             if 'теория' in section_name:
                 current_type = 'theory'
             else:
@@ -61,7 +57,6 @@ def update_index(new_questions):
     final_questions = []
     for i, q in enumerate(new_questions):
         correct = q['correctAnswer']
-        # Filter distractors to be different from correct
         potential = [a for a in all_answers if a != correct]
         # Pick 3 random
         distractors = random.sample(potential, 3) if len(potential) >=3 else potential
@@ -83,9 +78,6 @@ def update_index(new_questions):
     with open(ts_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Regex to find QUESTION_POOL
-    # const QUESTION_POOL: Question[] = [ ... ];
-    # Use string slicing to be safe with backslashes
     pattern = re.compile(r'(const QUESTION_POOL: Question\[\] = )(\[.*?\])(;)', re.DOTALL)
     match = pattern.search(content)
     
@@ -94,6 +86,11 @@ def update_index(new_questions):
         with open(ts_path, 'w', encoding='utf-8') as f:
             f.write(new_content)
         print(f"Successfully updated index.tsx with {len(final_questions)} questions.")
+        
+        # Count types
+        theory_count = sum(1 for q in final_questions if q['type'] == 'theory')
+        print(f"Theory questions: {theory_count}")
+        print(f"Practice questions: {len(final_questions) - theory_count}")
     else:
         print("Could not find QUESTION_POOL in index.tsx")
 
