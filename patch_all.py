@@ -49,22 +49,38 @@ def parse_questions(md_path):
 
 def classify_answer(ans):
     ans = ans.strip()
-    # Check for coordinates: (num; num) or {num; num} or [num; num]
-    # Allow for multiple points: (..), (..)
-    if re.search(r'[\(\{\[][\d\.\,\;\s\-\+]+[\)\}\]]', ans) and ';' in ans:
-         return 'coordinates'
-    if re.search(r'\(-?\d+(\.\d+)?;\s*-?\d+(\.\d+)?', ans):
+    
+    # 1. Coordinates / Vectors / Sets
+    # Matches: (1;2), {1;2}, [1;2], (-5.5; 0)
+    # Must contain delimiters and ; or , with numbers
+    if re.search(r'[\(\{\[][\d\.\,\;\s\-\+\\]{2,}[\)\}\]]', ans):
+        return 'coordinates'
+    if 'vector' in ans.lower() or 'вектор' in ans.lower():
          return 'coordinates'
          
-    # Check for equations
-    if '=' in ans and (('x' in ans) or ('y' in ans) or ('z' in ans)):
+    # 2. Equations / Formulas
+    # Must contain = and variables
+    if '=' in ans and re.search(r'[xyza-zA-Z]', ans):
         return 'equation'
+    
+    # 3. Numeric / Short Math Expressions
+    # Allow digits, standard math symbols, and common latex: \pm, \sqrt, \frac, \infty, \degree, \pi
+    # Also allow simple plain text like "5" or "-10.5" or "±4"
+    math_chars = r'[\d\s\.\,\+\-\*\/\^\(\)a-zA-Z\\]'
+    special_symbols = ['±', '∞', '∅', '°']
+    
+    is_mostly_math = True
+    for char in ans:
+        if char not in special_symbols and not re.match(math_chars, char):
+            # Check if it's a Cyrillic character - likely text then
+            if re.match(r'[а-яА-Я]', char):
+                is_mostly_math = False
+                break
+                
+    if is_mostly_math and len(ans) < 50:
+        return 'value'
         
-    # Check for numeric values (including simple expressions like sqrt, pi)
-    # If it contains mainly digits, ., -, /, sqrt, pi, e
-    if re.match(r'^[\d\s\.\,\+\-\*\/\^\(\)a-zA-Z\\]+$', ans) and len(ans) < 30:
-         return 'value'
-         
+    # 4. Text / Definitions
     return 'text'
 
 def update_index(new_questions):
